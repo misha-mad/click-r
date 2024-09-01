@@ -81,7 +81,7 @@ impl Application for AutoClicker {
                             enigo.button(MouseButton::Left, Click).unwrap();
                         }
 
-                        thread::sleep(Duration::from_secs(interval as u64));
+                        thread::park_timeout(Duration::from_secs(interval as u64));
                     }
                 });
 
@@ -94,6 +94,7 @@ impl Application for AutoClicker {
                 if let Some(sender) = self.stop_sender.take() {
                     if sender.send(()).is_ok() {
                         if let Some(handle) = self.click_thread.take() {
+                            handle.thread().unpark();
                             handle.join().unwrap();
                         }
                     }
