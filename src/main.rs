@@ -4,7 +4,7 @@ use iced::widget::{column, horizontal_rule, pick_list, row, slider, text, Button
 use iced::Alignment::Center;
 use iced::Length::FillPortion;
 use iced::{executor, Application, Command, Element, Settings as IcedSettings, Subscription};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -16,7 +16,8 @@ struct AutoClicker {
     click_thread: Option<thread::JoinHandle<()>>,
     stop_sender: Option<mpsc::Sender<()>>,
     clicks_count_slider_value: u8,
-    selected_mouse_button: MouseButton,
+    selected_mouse_button: Arc<Mutex<MouseButton>>,
+    total_clicks: Arc<Mutex<i32>>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,22 +52,26 @@ impl Application for AutoClicker {
                 Command::none()
             }
             Message::SelectMouseButton(button) => {
-                self.selected_mouse_button = button;
+                self.selected_mouse_button = Arc::new(Mutex::new(button));
                 Command::none()
             }
             Message::Start => {
                 println!("Starting the auto clicker");
                 self.is_running = true;
                 self.elapsed_time = 0;
+                self.total_clicks = Arc::new(Mutex::new(0));
                 println!("click_interval_secs {}", self.click_interval_slider_value);
                 let interval = self.click_interval_slider_value;
                 let clicks_count = self.clicks_count_slider_value;
                 let (tx, rx) = mpsc::channel();
+                let total_clicks = Arc::clone(&self.total_clicks);
+                let selected_mouse_button = Arc::clone(&self.selected_mouse_button);
                 self.stop_sender = Some(tx);
 
                 let handle = thread::spawn(move || {
                     println!("interval {}", interval);
                     let mut enigo = Enigo::new(&EnigoSettings::default()).unwrap();
+                    let button = selected_mouse_button.lock().unwrap().clone();
 
                     loop {
                         if rx.try_recv().is_ok() {
@@ -78,7 +83,8 @@ impl Application for AutoClicker {
 
                         for _ in 0..clicks_count {
                             println!("Clicking");
-                            enigo.button(MouseButton::Left, Click).unwrap();
+                            enigo.button(button, Click).unwrap();
+                            *total_clicks.lock().unwrap() += 1;
                         }
 
                         thread::park_timeout(Duration::from_secs(interval as u64));
@@ -153,6 +159,8 @@ impl Application for AutoClicker {
         let middle_button = Button::new(Text::new("Middle"))
             .on_press(Message::SelectMouseButton(MouseButton::Middle));
 
+        let total_clicks = self.total_clicks.lock().unwrap();
+        let total_clicks_text = Text::new(format!("Total Clicks: {}", *total_clicks));
         let timer_text = Text::new(format!("Timer: {}s", self.elapsed_time));
         let start_button = Button::new(Text::new("Start")).on_press(Message::Start);
         let stop_button = Button::new(Text::new("Stop")).on_press(Message::Stop);
@@ -193,8 +201,17 @@ impl Application for AutoClicker {
             .align_items(Center)
             .spacing(10),
             horizontal_rule(20),
-            // The `Timer` and `Start`/`Stop` buttons section
-            timer_text,
+        ]
+        .spacing(10)
+        .padding(20)
+        .align_items(Center);
+
+        let footer = column![
+            horizontal_rule(20),
+            row![timer_text, total_clicks_text,]
+                .align_items(Center)
+                .spacing(10),
+            horizontal_rule(20),
             row![
                 start_button.on_press_maybe(if self.is_running {
                     None
@@ -214,7 +231,15 @@ impl Application for AutoClicker {
         .padding(20)
         .align_items(Center);
 
-        content.into()
+        let final_content = column![
+            content.height(FillPortion(3)),
+            footer.height(FillPortion(1))
+        ]
+        .spacing(10)
+        .padding(20)
+        .align_items(Center);
+
+        final_content.into()
     }
 
     fn theme(&self) -> Self::Theme {
@@ -240,7 +265,8 @@ impl Default for AutoClicker {
             stop_sender: None,
             theme: Theme::Light,
             clicks_count_slider_value: 1,
-            selected_mouse_button: MouseButton::Left,
+            selected_mouse_button: Arc::new(Mutex::new(MouseButton::Left)),
+            total_clicks: Arc::new(Mutex::new(0)),
         }
     }
 }
