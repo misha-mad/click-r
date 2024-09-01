@@ -1,6 +1,6 @@
 use enigo::{Button as MouseButton, Direction::Click, Enigo, Mouse, Settings as EnigoSettings};
-use iced::theme::Theme;
-use iced::widget::{column, horizontal_rule, pick_list, row, slider, text, Button, Text};
+use iced::theme::{Button, Theme};
+use iced::widget::{button, column, horizontal_rule, pick_list, row, slider, text};
 use iced::Alignment::Center;
 use iced::Length::FillPortion;
 use iced::{executor, Application, Command, Element, Settings as IcedSettings, Subscription};
@@ -9,26 +9,26 @@ use std::thread;
 use std::time::Duration;
 
 struct AutoClicker {
-    theme: Theme,
     click_interval_slider_value: u8,
-    is_running: bool,
-    elapsed_time: u64,
     click_thread: Option<thread::JoinHandle<()>>,
-    stop_sender: Option<mpsc::Sender<()>>,
     clicks_count_slider_value: u8,
+    elapsed_time: u64,
+    is_running: bool,
     selected_mouse_button: Arc<Mutex<MouseButton>>,
+    stop_sender: Option<mpsc::Sender<()>>,
+    theme: Theme,
     total_clicks: Arc<Mutex<i32>>,
 }
 
 #[derive(Debug, Clone)]
 enum Message {
-    ThemeChanged(Theme),
-    IntervalSliderChanged(u8),
     ClickCountSliderChanged(u8),
-    Tick,
+    IntervalSliderChanged(u8),
+    SelectMouseButton(MouseButton),
     Start,
     Stop,
-    SelectMouseButton(MouseButton),
+    ThemeChanged(Theme),
+    Tick,
 }
 
 impl Application for AutoClicker {
@@ -132,7 +132,7 @@ impl Application for AutoClicker {
     fn view(&self) -> Element<Self::Message> {
         let theme_text = text("Theme:");
         let pick_list = pick_list(Theme::ALL, Some(&self.theme), Message::ThemeChanged);
-        let interval_text = Text::new(format!("Interval: {}s", self.click_interval_slider_value));
+        let interval_text = text(format!("Interval: {}s", self.click_interval_slider_value));
 
         let interval_slider = slider(
             1..=100,
@@ -140,7 +140,7 @@ impl Application for AutoClicker {
             Message::IntervalSliderChanged,
         );
 
-        let clicks_count_text = Text::new(format!("Clicks: {}", self.clicks_count_slider_value));
+        let clicks_count_text = text(format!("Clicks: {}", self.clicks_count_slider_value));
 
         let clicks_count_slider = slider(
             1..=100,
@@ -148,22 +148,43 @@ impl Application for AutoClicker {
             Message::ClickCountSliderChanged,
         );
 
-        let choose_mouse_button_text = Text::new("Choose mouse button:");
+        let choose_mouse_button_text = text("Choose mouse button:");
 
-        let left_button =
-            Button::new(Text::new("Left")).on_press(Message::SelectMouseButton(MouseButton::Left));
+        let left_button = button(text("Left"))
+            .on_press(Message::SelectMouseButton(MouseButton::Left))
+            .style(
+                if *self.selected_mouse_button.lock().unwrap() == MouseButton::Left {
+                    Button::Primary
+                } else {
+                    Button::Secondary
+                },
+            );
 
-        let right_button = Button::new(Text::new("Right"))
-            .on_press(Message::SelectMouseButton(MouseButton::Right));
+        let middle_button = button(text("Middle"))
+            .on_press(Message::SelectMouseButton(MouseButton::Middle))
+            .style(
+                if *self.selected_mouse_button.lock().unwrap() == MouseButton::Middle {
+                    Button::Primary
+                } else {
+                    Button::Secondary
+                },
+            );
 
-        let middle_button = Button::new(Text::new("Middle"))
-            .on_press(Message::SelectMouseButton(MouseButton::Middle));
+        let right_button = button(text("Right"))
+            .on_press(Message::SelectMouseButton(MouseButton::Right))
+            .style(
+                if *self.selected_mouse_button.lock().unwrap() == MouseButton::Right {
+                    Button::Primary
+                } else {
+                    Button::Secondary
+                },
+            );
 
         let total_clicks = self.total_clicks.lock().unwrap();
-        let total_clicks_text = Text::new(format!("Total Clicks: {}", *total_clicks));
-        let timer_text = Text::new(format!("Timer: {}s", self.elapsed_time));
-        let start_button = Button::new(Text::new("Start")).on_press(Message::Start);
-        let stop_button = Button::new(Text::new("Stop")).on_press(Message::Stop);
+        let total_clicks_text = text(format!("Total Clicks: {}", *total_clicks));
+        let timer_text = text(format!("Timer: {}s", self.elapsed_time));
+        let start_button = button(text("Start"));
+        let stop_button = button(text("Stop"));
 
         let content = column![
             // The `Theme` section
@@ -193,7 +214,7 @@ impl Application for AutoClicker {
             // The `Mouse Button` section
             row![
                 choose_mouse_button_text.width(FillPortion(1)),
-                row![left_button, right_button, middle_button]
+                row![left_button, middle_button, right_button]
                     .width(FillPortion(2))
                     .align_items(Center)
                     .spacing(10),
@@ -208,7 +229,7 @@ impl Application for AutoClicker {
 
         let footer = column![
             horizontal_rule(20),
-            row![timer_text, total_clicks_text,]
+            row![timer_text, total_clicks_text]
                 .align_items(Center)
                 .spacing(10),
             horizontal_rule(20),
@@ -231,7 +252,7 @@ impl Application for AutoClicker {
         .padding(20)
         .align_items(Center);
 
-        let final_content = column![
+        let page = column![
             content.height(FillPortion(3)),
             footer.height(FillPortion(1))
         ]
@@ -239,7 +260,7 @@ impl Application for AutoClicker {
         .padding(20)
         .align_items(Center);
 
-        final_content.into()
+        page.into()
     }
 
     fn theme(&self) -> Self::Theme {
@@ -258,14 +279,14 @@ impl Application for AutoClicker {
 impl Default for AutoClicker {
     fn default() -> Self {
         Self {
+            click_interval_slider_value: 1,
             click_thread: None,
+            clicks_count_slider_value: 1,
             elapsed_time: 0,
             is_running: false,
-            click_interval_slider_value: 1,
+            selected_mouse_button: Arc::new(Mutex::new(MouseButton::Left)),
             stop_sender: None,
             theme: Theme::Light,
-            clicks_count_slider_value: 1,
-            selected_mouse_button: Arc::new(Mutex::new(MouseButton::Left)),
             total_clicks: Arc::new(Mutex::new(0)),
         }
     }
