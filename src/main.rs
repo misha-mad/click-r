@@ -13,7 +13,7 @@ struct AutoClicker {
     click_thread: Option<thread::JoinHandle<()>>,
     clicks_count_slider_value: u8,
     delay_before_start_value: u8,
-    duration_value: u8,
+    duration_value: Option<u8>,
     delay_timer: u64,
     time_running: u64,
     is_running: Arc<Mutex<bool>>,
@@ -28,7 +28,7 @@ struct AutoClicker {
 enum Message {
     ClickCountSliderChanged(u8),
     DelayBeforeStartSliderChanged(u8),
-    DurationSliderChanged(u8),
+    DurationSliderChanged(Option<u8>),
     IntervalSliderChanged(u8),
     SelectMouseButton(MouseButton),
     Start,
@@ -77,22 +77,30 @@ impl Application for AutoClicker {
                 let selected_mouse_button = Arc::clone(&self.selected_mouse_button);
                 let is_running = Arc::clone(&self.is_running);
                 let delay_before_start = self.delay_before_start_value;
+
                 let end_time = std::time::Instant::now()
-                    + Duration::from_secs(duration as u64)
+                    + Duration::from_secs(duration.unwrap_or(1) as u64)
                     + Duration::from_secs(delay_before_start as u64);
+
                 self.stop_sender = Some(tx);
 
                 let handle = thread::spawn(move || {
+                    let now = std::time::Instant::now();
                     println!("interval {}", interval);
                     thread::park_timeout(Duration::from_secs(delay_before_start as u64));
                     let mut enigo = Enigo::new(&EnigoSettings::default()).unwrap();
                     let button = selected_mouse_button.lock().unwrap().clone();
 
                     loop {
-                        if rx.try_recv().is_ok() || std::time::Instant::now() >= end_time {
+                        if rx.try_recv().is_ok() {
                             *is_running.lock().unwrap() = false;
+                            println!("Stop signal received");
+                            break;
+                        }
 
-                            println!("Stop signal received or duration elapsed");
+                        if duration.is_some() && now >= end_time {
+                            *is_running.lock().unwrap() = false;
+                            println!("Duration elapsed");
                             break;
                         }
 
@@ -113,7 +121,6 @@ impl Application for AutoClicker {
             }
             Message::Stop => {
                 println!("Stopping the auto clicker");
-                self.ticks_count = 0;
 
                 if let Some(sender) = self.stop_sender.take() {
                     if sender.send(()).is_ok() {
@@ -155,7 +162,7 @@ impl Application for AutoClicker {
                 Command::none()
             }
             Message::DurationSliderChanged(new_duration) => {
-                println!("Setting duration_value to {} seconds", new_duration);
+                println!("Setting duration_value to {:?}", new_duration);
                 self.duration_value = new_duration;
                 Command::none()
             }
@@ -193,8 +200,18 @@ impl Application for AutoClicker {
             Message::ClickCountSliderChanged,
         );
 
-        let duration_text = text(format!("Duration: {}s", self.duration_value));
-        let duration_slider = slider(1..=100, self.duration_value, Message::DurationSliderChanged);
+        let duration_text = text(format!(
+            "Duration: {}",
+            self.duration_value
+                .map_or("Infinite".to_string(), |v| v.to_string())
+        ));
+
+        let duration_slider = slider(
+            1..=100,
+            self.duration_value.unwrap_or(100), // Use 100 as a placeholder for infinite
+            |value| Message::DurationSliderChanged(if value == 100 { None } else { Some(value) }),
+        );
+
         let choose_mouse_button_text = text("Choose mouse button:");
 
         let left_button = button(text("Left"))
@@ -349,7 +366,7 @@ impl Default for AutoClicker {
             click_thread: None,
             clicks_count_slider_value: 1,
             delay_before_start_value: 0,
-            duration_value: 10,
+            duration_value: None,
             delay_timer: 0,
             time_running: 0,
             is_running: Arc::new(Mutex::new(false)),
