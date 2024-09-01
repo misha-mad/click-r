@@ -14,7 +14,8 @@ struct AutoClicker {
     clicks_count_slider_value: u8,
     delay_before_start_value: u8,
     duration_value: u8,
-    elapsed_time: u64,
+    delay_timer: u64,
+    time_running: u64,
     is_running: Arc<Mutex<bool>>,
     selected_mouse_button: Arc<Mutex<MouseButton>>,
     stop_sender: Option<mpsc::Sender<()>>,
@@ -63,7 +64,9 @@ impl Application for AutoClicker {
             Message::Start => {
                 println!("Starting the auto clicker");
                 *self.is_running.lock().unwrap() = true;
-                self.elapsed_time = 0;
+                self.delay_timer = 0;
+                self.time_running = 0;
+                self.ticks_count = 0;
                 self.total_clicks = Arc::new(Mutex::new(0));
                 println!("click_interval_secs {}", self.click_interval_slider_value);
                 let interval = self.click_interval_slider_value;
@@ -88,6 +91,7 @@ impl Application for AutoClicker {
                     loop {
                         if rx.try_recv().is_ok() || std::time::Instant::now() >= end_time {
                             *is_running.lock().unwrap() = false;
+
                             println!("Stop signal received or duration elapsed");
                             break;
                         }
@@ -109,6 +113,7 @@ impl Application for AutoClicker {
             }
             Message::Stop => {
                 println!("Stopping the auto clicker");
+                self.ticks_count = 0;
 
                 if let Some(sender) = self.stop_sender.take() {
                     if sender.send(()).is_ok() {
@@ -126,7 +131,9 @@ impl Application for AutoClicker {
                     self.ticks_count += 1;
 
                     if self.ticks_count > self.delay_before_start_value as u64 {
-                        self.elapsed_time += 1;
+                        self.time_running += 1;
+                    } else {
+                        self.delay_timer += 1;
                     }
                 }
 
@@ -222,7 +229,8 @@ impl Application for AutoClicker {
 
         let total_clicks = self.total_clicks.lock().unwrap();
         let total_clicks_text = text(format!("Total Clicks: {}", *total_clicks));
-        let timer_text = text(format!("Timer: {}s", self.elapsed_time));
+        let delay_timer_text = text(format!("Delay Timer: {}s", self.delay_timer));
+        let time_running_text = text(format!("Time Running: {}s", self.time_running));
         let start_button = button(text("Start"));
         let stop_button = button(text("Stop"));
 
@@ -285,7 +293,7 @@ impl Application for AutoClicker {
 
         let footer = column![
             horizontal_rule(20),
-            row![timer_text, total_clicks_text]
+            row![delay_timer_text, time_running_text, total_clicks_text]
                 .align_items(Center)
                 .spacing(10)
                 .height(FillPortion(1)),
@@ -342,7 +350,8 @@ impl Default for AutoClicker {
             clicks_count_slider_value: 1,
             delay_before_start_value: 0,
             duration_value: 10,
-            elapsed_time: 0,
+            delay_timer: 0,
+            time_running: 0,
             is_running: Arc::new(Mutex::new(false)),
             selected_mouse_button: Arc::new(Mutex::new(MouseButton::Left)),
             stop_sender: None,
