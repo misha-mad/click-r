@@ -1,4 +1,4 @@
-# Click-R: Automatic Clicker
+# Click🦀R: Automatic Clicker
 
 Click-R is a Rust-based application that allows you to automate mouse clicks with a specified interval and number of
 clicks. The application uses the `iced` library for the graphical interface and `enigo` for mouse control.
@@ -66,4 +66,4 @@ If you have any questions or suggestions, please contact the project author.
 
 ___
 
-Enjoy using Click-R and automate your mouse clicks with ease!
+Enjoy using Click-R and automate your mouse clicks with ease ❤️
