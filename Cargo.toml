@@ -12,3 +12,6 @@ authors = ["misha-mad"]
 [dependencies]
 iced = { version = "0.12.1", features = ["tokio"] }
 enigo = "0.2.1"
+
+[badges]
+maintenance = { status = "actively-developed" }
