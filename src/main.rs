@@ -203,7 +203,7 @@ impl Application for AutoClicker {
         let duration_text = text(format!(
             "Duration: {}",
             self.duration_value
-                .map_or("Infinite".to_string(), |v| v.to_string())
+                .map_or("∞".to_string(), |v| v.to_string())
         ));
 
         let duration_slider = slider(
