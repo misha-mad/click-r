@@ -1,0 +1,11 @@
+[package]
+name = "click-r"
+version = "0.2.0"
+edition = "2021"
+description = "A simple autoclicker written in Rust"
+license = "MIT"
+
+[dependencies]
+iced = { version = "0.12.1", features = ["tokio"] }
+enigo = "0.2.1"
+tokio = { version = "1.40.0", features = ["full"] }
