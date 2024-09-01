@@ -402,7 +402,7 @@ impl Application for AutoClicker {
 
         let reset_button = button(text("Reset to Defaults"))
             .on_press(Message::ResetToDefaults)
-            .style(Button::Secondary);
+            .style(Button::Destructive);
 
         let content = column![
             // The `Parameter Name` section
