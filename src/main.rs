@@ -4,7 +4,7 @@ use iced::theme::{Button, Theme};
 use iced::widget::{button, column, horizontal_rule, pick_list, row, slider, text, text_input};
 use iced::Alignment::Center;
 use iced::Font;
-use iced::Length::FillPortion;
+use iced::Length::{Fill, FillPortion};
 use iced::{executor, Application, Command, Element, Settings as IcedSettings, Subscription};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -40,6 +40,7 @@ enum Message {
     DurationMinutesChanged(u64),
     DurationSecondsChanged(u64),
     IntervalSliderChanged(u8),
+    ResetToDefaults,
     SelectMouseButton(MouseButton),
     Start,
     Stop,
@@ -169,6 +170,10 @@ impl Application for AutoClicker {
                     }
                 }
 
+                Command::none()
+            }
+            Message::ResetToDefaults => {
+                *self = Self::default();
                 Command::none()
             }
             Message::IntervalSliderChanged(new_interval) => {
@@ -395,6 +400,10 @@ impl Application for AutoClicker {
         let start_button = button(text("Start"));
         let stop_button = button(text("Stop"));
 
+        let reset_button = button(text("Reset to Defaults"))
+            .on_press(Message::ResetToDefaults)
+            .style(Button::Secondary);
+
         let content = column![
             // The `Parameter Name` section
             row![
@@ -526,16 +535,28 @@ impl Application for AutoClicker {
                 .height(FillPortion(1)),
             horizontal_rule(20),
             row![
-                start_button.on_press_maybe(if *self.is_running.lock().unwrap() {
-                    None
-                } else {
-                    Some(Message::Start)
-                }),
-                stop_button.on_press_maybe(if *self.is_running.lock().unwrap() {
-                    Some(Message::Stop)
-                } else {
-                    None
-                }),
+                row![].width(Fill),
+                row![
+                    row![].width(Fill),
+                    start_button.on_press_maybe(if *self.is_running.lock().unwrap() {
+                        None
+                    } else {
+                        Some(Message::Start)
+                    }),
+                    stop_button.on_press_maybe(if *self.is_running.lock().unwrap() {
+                        Some(Message::Stop)
+                    } else {
+                        None
+                    }),
+                    row![].width(Fill),
+                ]
+                .spacing(10)
+                .width(FillPortion(1)),
+                row![
+                    row![].width(Fill),
+                    row![reset_button.on_press(Message::ResetToDefaults),],
+                ]
+                .width(FillPortion(1)),
             ]
             .align_items(Center)
             .spacing(10)
