@@ -1,7 +1,9 @@
 use enigo::{Button as MouseButton, Direction::Click, Enigo, Mouse, Settings as EnigoSettings};
+use iced::font::{Family, Stretch, Style, Weight};
 use iced::theme::{Button, Theme};
 use iced::widget::{button, column, horizontal_rule, pick_list, row, slider, text, text_input};
 use iced::Alignment::Center;
+use iced::Font;
 use iced::Length::FillPortion;
 use iced::{executor, Application, Command, Element, Settings as IcedSettings, Subscription};
 use std::sync::{mpsc, Arc, Mutex};
@@ -213,9 +215,32 @@ impl Application for AutoClicker {
     }
 
     fn view(&self) -> Element<Self::Message> {
+        let parameter_name_text = text("Parameter Name:").font(Font {
+            family: Family::SansSerif,
+            weight: Weight::Bold,
+            stretch: Stretch::Normal,
+            style: Style::Normal,
+        });
+
+        let current_value_text = text("Current Value:").font(Font {
+            family: Family::SansSerif,
+            weight: Weight::Bold,
+            stretch: Stretch::Normal,
+            style: Style::Normal,
+        });
+
+        let input_text = text("Input:").font(Font {
+            family: Family::SansSerif,
+            weight: Weight::Bold,
+            stretch: Stretch::Normal,
+            style: Style::Normal,
+        });
+
         let theme_text = text("Theme:");
+        let theme_current_value_text = text(format!("{:?}", self.theme));
         let pick_list = pick_list(Theme::ALL, Some(&self.theme), Message::ThemeChanged);
-        let interval_text = text(format!("Interval: {}s", self.click_interval_slider_value));
+        let interval_text = text("Interval:");
+        let interval_current_value_text = text(format!("{:?}", self.click_interval_slider_value));
 
         let interval_slider = slider(
             1..=100,
@@ -223,7 +248,8 @@ impl Application for AutoClicker {
             Message::IntervalSliderChanged,
         );
 
-        let clicks_count_text = text(format!("Clicks: {}", self.clicks_count_slider_value));
+        let clicks_count_text = text("Clicks per interval:");
+        let clicks_count_current_value_text = text(format!("{:?}", self.clicks_count_slider_value));
 
         let clicks_count_slider = slider(
             1..=100,
@@ -231,8 +257,10 @@ impl Application for AutoClicker {
             Message::ClickCountSliderChanged,
         );
 
-        let delay_before_start_text = text(format!(
-            "Delay before start: {}s",
+        let delay_before_start_text = text("Delay before start: {}s");
+
+        let delay_before_start_current_value_text = text(format!(
+            "{}s",
             self.delay_seconds + self.delay_minutes * 60 + self.delay_hours * 3600
         ));
 
@@ -272,10 +300,22 @@ impl Application for AutoClicker {
             })
             .width(FillPortion(1));
 
-        let duration_text = text(format!(
-            "Duration: {}",
-            self.duration_seconds + self.duration_minutes * 60 + self.duration_hours * 3600
-        ));
+        let duration_text = text("Duration:");
+
+        let duration_current_value_text = text(
+            if self.duration_seconds == 0 && self.duration_minutes == 0 && self.duration_hours == 0
+            {
+                "∞".to_string()
+            } else {
+                format!(
+                    "{}s",
+                    (self.duration_seconds
+                        + self.duration_minutes * 60
+                        + self.duration_hours * 3600)
+                        .to_string()
+                )
+            },
+        );
 
         let duration_hours_text = text("Hours:");
 
@@ -315,6 +355,9 @@ impl Application for AutoClicker {
 
         let choose_mouse_button_text = text("Choose mouse button:");
 
+        let choose_mouse_button_current_value_text =
+            text(format!("{:?}", self.selected_mouse_button.lock().unwrap()));
+
         let left_button = button(text("Left"))
             .on_press(Message::SelectMouseButton(MouseButton::Left))
             .style(
@@ -353,9 +396,29 @@ impl Application for AutoClicker {
         let stop_button = button(text("Stop"));
 
         let content = column![
+            // The `Parameter Name` section
+            row![
+                row![
+                    parameter_name_text.width(FillPortion(1)),
+                    current_value_text.width(FillPortion(1))
+                ]
+                .align_items(Center)
+                .spacing(10)
+                .width(FillPortion(1)),
+                input_text.width(FillPortion(2))
+            ]
+            .align_items(Center)
+            .spacing(10),
+            horizontal_rule(20),
             // The `Theme` section
             row![
-                theme_text.width(FillPortion(1)),
+                row![
+                    theme_text.width(FillPortion(1)),
+                    theme_current_value_text.width(FillPortion(1)),
+                ]
+                .align_items(Center)
+                .spacing(10)
+                .width(FillPortion(1)),
                 pick_list.width(FillPortion(2))
             ]
             .align_items(Center)
@@ -363,7 +426,13 @@ impl Application for AutoClicker {
             horizontal_rule(20),
             // The `Interval` section
             row![
-                interval_text.width(FillPortion(1)),
+                row![
+                    interval_text.width(FillPortion(1)),
+                    interval_current_value_text.width(FillPortion(1)),
+                ]
+                .align_items(Center)
+                .spacing(10)
+                .width(FillPortion(1)),
                 interval_slider.width(FillPortion(2))
             ]
             .align_items(Center)
@@ -371,7 +440,13 @@ impl Application for AutoClicker {
             horizontal_rule(20),
             // The `Clicks` section
             row![
-                clicks_count_text.width(FillPortion(1)),
+                row![
+                    clicks_count_text.width(FillPortion(1)),
+                    clicks_count_current_value_text.width(FillPortion(1)),
+                ]
+                .align_items(Center)
+                .spacing(10)
+                .width(FillPortion(1)),
                 clicks_count_slider.width(FillPortion(2))
             ]
             .align_items(Center)
@@ -379,7 +454,13 @@ impl Application for AutoClicker {
             horizontal_rule(20),
             // The `Delay Before Start` section
             row![
-                delay_before_start_text.width(FillPortion(1)),
+                row![
+                    delay_before_start_text.width(FillPortion(1)),
+                    delay_before_start_current_value_text.width(FillPortion(1)),
+                ]
+                .align_items(Center)
+                .spacing(10)
+                .width(FillPortion(1)),
                 row![
                     delay_hours_text.width(FillPortion(1)),
                     delay_hours_input.width(FillPortion(2)),
@@ -395,7 +476,13 @@ impl Application for AutoClicker {
             horizontal_rule(20),
             // The `Duration` section
             row![
-                duration_text.width(FillPortion(1)),
+                row![
+                    duration_text.width(FillPortion(1)),
+                    duration_current_value_text.width(FillPortion(1)),
+                ]
+                .align_items(Center)
+                .spacing(10)
+                .width(FillPortion(1)),
                 row![
                     duration_hours_text.width(FillPortion(1)),
                     duration_hours_input.width(FillPortion(2)),
@@ -411,7 +498,13 @@ impl Application for AutoClicker {
             horizontal_rule(20),
             // The `Mouse Button` section
             row![
-                choose_mouse_button_text.width(FillPortion(1)),
+                row![
+                    choose_mouse_button_text.width(FillPortion(1)),
+                    choose_mouse_button_current_value_text.width(FillPortion(1)),
+                ]
+                .align_items(Center)
+                .spacing(10)
+                .width(FillPortion(1)),
                 row![left_button, middle_button, right_button]
                     .width(FillPortion(2))
                     .align_items(Center)
@@ -493,7 +586,7 @@ impl Default for AutoClicker {
             is_running: Arc::new(Mutex::new(false)),
             selected_mouse_button: Arc::new(Mutex::new(MouseButton::Left)),
             stop_sender: None,
-            theme: Theme::Light,
+            theme: Theme::Oxocarbon,
             ticks_count: 0,
             total_clicks: Arc::new(Mutex::new(0)),
         }
