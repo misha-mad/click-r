@@ -55,63 +55,58 @@ impl Application for AutoClicker {
                 Command::none()
             }
             Message::Start => {
-                if !self.is_running && self.click_interval_slider_value > 1 {
-                    println!("Starting the auto clicker");
-                    self.is_running = true;
-                    self.elapsed_time = 0;
-                    println!("click_interval_secs {}", self.click_interval_slider_value);
-                    let interval = self.click_interval_slider_value;
-                    let clicks_count = self.clicks_count_slider_value;
-                    let (tx, rx) = mpsc::channel();
-                    self.stop_sender = Some(tx);
+                println!("Starting the auto clicker");
+                self.is_running = true;
+                self.elapsed_time = 0;
+                println!("click_interval_secs {}", self.click_interval_slider_value);
+                let interval = self.click_interval_slider_value;
+                let clicks_count = self.clicks_count_slider_value;
+                let (tx, rx) = mpsc::channel();
+                self.stop_sender = Some(tx);
 
-                    let handle = thread::spawn(move || {
-                        println!("interval {}", interval);
-                        let mut enigo = Enigo::new(&EnigoSettings::default()).unwrap();
+                let handle = thread::spawn(move || {
+                    println!("interval {}", interval);
+                    let mut enigo = Enigo::new(&EnigoSettings::default()).unwrap();
 
-                        loop {
-                            if rx.try_recv().is_ok() {
-                                println!("Stop signal received");
-                                break;
-                            }
-
-                            println!("Clicking every {} seconds", interval);
-
-                            for _ in 0..clicks_count {
-                                println!("Clicking");
-                                enigo.button(MouseButton::Left, Click).unwrap();
-                            }
-
-                            thread::sleep(Duration::from_secs(interval as u64));
+                    loop {
+                        if rx.try_recv().is_ok() {
+                            println!("Stop signal received");
+                            break;
                         }
-                    });
 
-                    self.click_thread = Some(handle);
-                }
+                        println!("Clicking every {} seconds", interval);
 
+                        for _ in 0..clicks_count {
+                            println!("Clicking");
+                            enigo.button(MouseButton::Left, Click).unwrap();
+                        }
+
+                        thread::sleep(Duration::from_secs(interval as u64));
+                    }
+                });
+
+                self.click_thread = Some(handle);
                 Command::none()
             }
             Message::Stop => {
-                if self.is_running {
-                    println!("Stopping the auto clicker");
+                println!("Stopping the auto clicker");
 
-                    if let Some(sender) = self.stop_sender.take() {
-                        if sender.send(()).is_ok() {
-                            if let Some(handle) = self.click_thread.take() {
-                                handle.join().unwrap();
-                            }
+                if let Some(sender) = self.stop_sender.take() {
+                    if sender.send(()).is_ok() {
+                        if let Some(handle) = self.click_thread.take() {
+                            handle.join().unwrap();
                         }
                     }
-
-                    self.is_running = false;
                 }
 
+                self.is_running = false;
                 Command::none()
             }
             Message::Tick => {
                 if self.is_running {
                     self.elapsed_time += 1;
                 }
+
                 Command::none()
             }
             Message::IntervalSliderChanged(new_interval) => {
@@ -146,10 +141,14 @@ impl Application for AutoClicker {
             Message::ClickCountSliderChanged,
         );
 
+        let choose_mouse_button_text = Text::new("Choose mouse button:");
+
         let left_button =
             Button::new(Text::new("Left")).on_press(Message::SelectMouseButton(MouseButton::Left));
+
         let right_button = Button::new(Text::new("Right"))
             .on_press(Message::SelectMouseButton(MouseButton::Right));
+
         let middle_button = Button::new(Text::new("Middle"))
             .on_press(Message::SelectMouseButton(MouseButton::Middle));
 
@@ -183,9 +182,15 @@ impl Application for AutoClicker {
             .spacing(10),
             horizontal_rule(20),
             // The `Mouse Button` section
-            row![left_button, right_button, middle_button,]
-                .align_items(Center)
-                .spacing(10),
+            row![
+                choose_mouse_button_text.width(FillPortion(1)),
+                row![left_button, right_button, middle_button]
+                    .width(FillPortion(2))
+                    .align_items(Center)
+                    .spacing(10),
+            ]
+            .align_items(Center)
+            .spacing(10),
             horizontal_rule(20),
             // The `Timer` and `Start`/`Stop` buttons section
             timer_text,
@@ -211,16 +216,16 @@ impl Application for AutoClicker {
         content.into()
     }
 
+    fn theme(&self) -> Self::Theme {
+        self.theme.clone()
+    }
+
     fn subscription(&self) -> Subscription<Self::Message> {
         if self.is_running {
             iced::time::every(Duration::from_millis(1000)).map(|_| Message::Tick)
         } else {
             Subscription::none()
         }
-    }
-
-    fn theme(&self) -> Self::Theme {
-        self.theme.clone()
     }
 }
 
