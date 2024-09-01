@@ -1,6 +1,6 @@
 use enigo::{Button as MouseButton, Direction::Click, Enigo, Mouse, Settings as EnigoSettings};
 use iced::theme::{Button, Theme};
-use iced::widget::{button, column, horizontal_rule, pick_list, row, slider, text};
+use iced::widget::{button, column, horizontal_rule, pick_list, row, slider, text, text_input};
 use iced::Alignment::Center;
 use iced::Length::FillPortion;
 use iced::{executor, Application, Command, Element, Settings as IcedSettings, Subscription};
@@ -12,8 +12,12 @@ struct AutoClicker {
     click_interval_slider_value: u8,
     click_thread: Option<thread::JoinHandle<()>>,
     clicks_count_slider_value: u8,
-    delay_before_start_value: u8,
-    duration_value: Option<u8>,
+    delay_hours: u64,
+    delay_minutes: u64,
+    delay_seconds: u64,
+    duration_hours: u64,
+    duration_minutes: u64,
+    duration_seconds: u64,
     delay_timer: u64,
     time_running: u64,
     is_running: Arc<Mutex<bool>>,
@@ -27,8 +31,12 @@ struct AutoClicker {
 #[derive(Debug, Clone)]
 enum Message {
     ClickCountSliderChanged(u8),
-    DelayBeforeStartSliderChanged(u8),
-    DurationSliderChanged(Option<u8>),
+    DelayHoursChanged(u64),
+    DelayMinutesChanged(u64),
+    DelaySecondsChanged(u64),
+    DurationHoursChanged(u64),
+    DurationMinutesChanged(u64),
+    DurationSecondsChanged(u64),
     IntervalSliderChanged(u8),
     SelectMouseButton(MouseButton),
     Start,
@@ -71,25 +79,37 @@ impl Application for AutoClicker {
                 println!("click_interval_secs {}", self.click_interval_slider_value);
                 let interval = self.click_interval_slider_value;
                 let clicks_count = self.clicks_count_slider_value;
-                let duration = self.duration_value;
                 let (tx, rx) = mpsc::channel();
                 let total_clicks = Arc::clone(&self.total_clicks);
                 let selected_mouse_button = Arc::clone(&self.selected_mouse_button);
                 let is_running = Arc::clone(&self.is_running);
-                let delay_before_start = self.delay_before_start_value;
 
-                let end_time = std::time::Instant::now()
-                    + Duration::from_secs(duration.unwrap_or(1) as u64)
-                    + Duration::from_secs(delay_before_start as u64);
+                let delay_before_start =
+                    self.delay_seconds + self.delay_minutes * 60 + self.delay_hours * 3600;
+
+                let duration = if self.duration_seconds == 0
+                    && self.duration_minutes == 0
+                    && self.duration_hours == 0
+                {
+                    None
+                } else {
+                    Some(
+                        self.duration_seconds
+                            + self.duration_minutes * 60
+                            + self.duration_hours * 3600,
+                    )
+                };
 
                 self.stop_sender = Some(tx);
 
                 let handle = thread::spawn(move || {
-                    let now = std::time::Instant::now();
                     println!("interval {}", interval);
-                    thread::park_timeout(Duration::from_secs(delay_before_start as u64));
+                    thread::park_timeout(Duration::from_secs(delay_before_start));
                     let mut enigo = Enigo::new(&EnigoSettings::default()).unwrap();
                     let button = selected_mouse_button.lock().unwrap().clone();
+
+                    let end_time =
+                        std::time::Instant::now() + Duration::from_secs(duration.unwrap_or(0));
 
                     loop {
                         if rx.try_recv().is_ok() {
@@ -98,7 +118,7 @@ impl Application for AutoClicker {
                             break;
                         }
 
-                        if duration.is_some() && now >= end_time {
+                        if duration.is_some() && std::time::Instant::now() >= end_time {
                             *is_running.lock().unwrap() = false;
                             println!("Duration elapsed");
                             break;
@@ -137,7 +157,10 @@ impl Application for AutoClicker {
                 if *self.is_running.lock().unwrap() {
                     self.ticks_count += 1;
 
-                    if self.ticks_count > self.delay_before_start_value as u64 {
+                    let delay_before_start =
+                        (self.delay_hours * 3600) + (self.delay_minutes * 60) + self.delay_seconds;
+
+                    if self.ticks_count > delay_before_start {
                         self.time_running += 1;
                     } else {
                         self.delay_timer += 1;
@@ -156,14 +179,34 @@ impl Application for AutoClicker {
                 self.clicks_count_slider_value = new_clicks_count;
                 Command::none()
             }
-            Message::DelayBeforeStartSliderChanged(new_delay) => {
-                println!("Setting delay_before_start_value to {} seconds", new_delay);
-                self.delay_before_start_value = new_delay;
+            Message::DelayHoursChanged(new_hours) => {
+                println!("Setting delay_hours to {}", new_hours);
+                self.delay_hours = new_hours;
                 Command::none()
             }
-            Message::DurationSliderChanged(new_duration) => {
-                println!("Setting duration_value to {:?}", new_duration);
-                self.duration_value = new_duration;
+            Message::DelayMinutesChanged(new_minutes) => {
+                println!("Setting delay_minutes to {}", new_minutes);
+                self.delay_minutes = new_minutes;
+                Command::none()
+            }
+            Message::DelaySecondsChanged(new_seconds) => {
+                println!("Setting delay_seconds to {}", new_seconds);
+                self.delay_seconds = new_seconds;
+                Command::none()
+            }
+            Message::DurationHoursChanged(new_hours) => {
+                println!("Setting duration_hours to {}", new_hours);
+                self.duration_hours = new_hours;
+                Command::none()
+            }
+            Message::DurationMinutesChanged(new_minutes) => {
+                println!("Setting duration_minutes to {}", new_minutes);
+                self.duration_minutes = new_minutes;
+                Command::none()
+            }
+            Message::DurationSecondsChanged(new_seconds) => {
+                println!("Setting duration_seconds to {}", new_seconds);
+                self.duration_seconds = new_seconds;
                 Command::none()
             }
         }
@@ -172,18 +215,6 @@ impl Application for AutoClicker {
     fn view(&self) -> Element<Self::Message> {
         let theme_text = text("Theme:");
         let pick_list = pick_list(Theme::ALL, Some(&self.theme), Message::ThemeChanged);
-
-        let delay_before_start_text = text(format!(
-            "Delay before start: {}s",
-            self.delay_before_start_value
-        ));
-
-        let delay_before_start_slider = slider(
-            0..=100,
-            self.delay_before_start_value,
-            Message::DelayBeforeStartSliderChanged,
-        );
-
         let interval_text = text(format!("Interval: {}s", self.click_interval_slider_value));
 
         let interval_slider = slider(
@@ -200,17 +231,87 @@ impl Application for AutoClicker {
             Message::ClickCountSliderChanged,
         );
 
-        let duration_text = text(format!(
-            "Duration: {}",
-            self.duration_value
-                .map_or("∞".to_string(), |v| v.to_string())
+        let delay_before_start_text = text(format!(
+            "Delay before start: {}s",
+            self.delay_seconds + self.delay_minutes * 60 + self.delay_hours * 3600
         ));
 
-        let duration_slider = slider(
-            1..=100,
-            self.duration_value.unwrap_or(100), // Use 100 as a placeholder for infinite
-            |value| Message::DurationSliderChanged(if value == 100 { None } else { Some(value) }),
-        );
+        let delay_hours_text = text("Hours:");
+
+        let delay_hours_input = text_input("Hours", &self.delay_hours.to_string())
+            .on_input(|s| {
+                if let Ok(value) = s.parse::<u64>() {
+                    Message::DelayHoursChanged(value.min(23))
+                } else {
+                    Message::DelayHoursChanged(0)
+                }
+            })
+            .width(FillPortion(1));
+
+        let delay_minutes_text = text("Minutes:");
+
+        let delay_minutes_input = text_input("Minutes", &self.delay_minutes.to_string())
+            .on_input(|s| {
+                if let Ok(value) = s.parse::<u64>() {
+                    Message::DelayMinutesChanged(value.min(59))
+                } else {
+                    Message::DelayMinutesChanged(0)
+                }
+            })
+            .width(FillPortion(1));
+
+        let delay_seconds_text = text("Seconds:");
+
+        let delay_seconds_input = text_input("Seconds", &self.delay_seconds.to_string())
+            .on_input(|s| {
+                if let Ok(value) = s.parse::<u64>() {
+                    Message::DelaySecondsChanged(value.min(59))
+                } else {
+                    Message::DelaySecondsChanged(0)
+                }
+            })
+            .width(FillPortion(1));
+
+        let duration_text = text(format!(
+            "Duration: {}",
+            self.duration_seconds + self.duration_minutes * 60 + self.duration_hours * 3600
+        ));
+
+        let duration_hours_text = text("Hours:");
+
+        let duration_hours_input = text_input("Hours", &self.duration_hours.to_string())
+            .on_input(|s| {
+                if let Ok(value) = s.parse::<u64>() {
+                    Message::DurationHoursChanged(value.min(23))
+                } else {
+                    Message::DurationHoursChanged(0)
+                }
+            })
+            .width(FillPortion(1));
+
+        let duration_minutes_text = text("Minutes:");
+
+        let duration_minutes_input = text_input("Minutes", &self.duration_minutes.to_string())
+            .on_input(|s| {
+                if let Ok(value) = s.parse::<u64>() {
+                    Message::DurationMinutesChanged(value.min(59))
+                } else {
+                    Message::DurationMinutesChanged(0)
+                }
+            })
+            .width(FillPortion(1));
+
+        let duration_seconds_text = text("Seconds:");
+
+        let duration_seconds_input = text_input("Seconds", &self.duration_seconds.to_string())
+            .on_input(|s| {
+                if let Ok(value) = s.parse::<u64>() {
+                    Message::DurationSecondsChanged(value.min(59))
+                } else {
+                    Message::DurationSecondsChanged(0)
+                }
+            })
+            .width(FillPortion(1));
 
         let choose_mouse_button_text = text("Choose mouse button:");
 
@@ -260,14 +361,6 @@ impl Application for AutoClicker {
             .align_items(Center)
             .spacing(10),
             horizontal_rule(20),
-            // The `Delay Before Start` section
-            row![
-                delay_before_start_text.width(FillPortion(1)),
-                delay_before_start_slider.width(FillPortion(2))
-            ]
-            .align_items(Center)
-            .spacing(10),
-            horizontal_rule(20),
             // The `Interval` section
             row![
                 interval_text.width(FillPortion(1)),
@@ -284,13 +377,37 @@ impl Application for AutoClicker {
             .align_items(Center)
             .spacing(10),
             horizontal_rule(20),
+            // The `Delay Before Start` section
+            row![
+                delay_before_start_text.width(FillPortion(1)),
+                row![
+                    delay_hours_text.width(FillPortion(1)),
+                    delay_hours_input.width(FillPortion(2)),
+                    delay_minutes_text.width(FillPortion(1)),
+                    delay_minutes_input.width(FillPortion(2)),
+                    delay_seconds_text.width(FillPortion(1)),
+                    delay_seconds_input.width(FillPortion(2)),
+                ]
+                .align_items(Center)
+                .spacing(10)
+                .width(FillPortion(2)),
+            ],
+            horizontal_rule(20),
             // The `Duration` section
             row![
                 duration_text.width(FillPortion(1)),
-                duration_slider.width(FillPortion(2))
-            ]
-            .align_items(Center)
-            .spacing(10),
+                row![
+                    duration_hours_text.width(FillPortion(1)),
+                    duration_hours_input.width(FillPortion(2)),
+                    duration_minutes_text.width(FillPortion(1)),
+                    duration_minutes_input.width(FillPortion(2)),
+                    duration_seconds_text.width(FillPortion(1)),
+                    duration_seconds_input.width(FillPortion(2)),
+                ]
+                .align_items(Center)
+                .spacing(10)
+                .width(FillPortion(2)),
+            ],
             horizontal_rule(20),
             // The `Mouse Button` section
             row![
@@ -365,9 +482,13 @@ impl Default for AutoClicker {
             click_interval_slider_value: 1,
             click_thread: None,
             clicks_count_slider_value: 1,
-            delay_before_start_value: 0,
-            duration_value: None,
+            delay_hours: 0,
+            delay_minutes: 0,
+            delay_seconds: 0,
             delay_timer: 0,
+            duration_hours: 0,
+            duration_minutes: 0,
+            duration_seconds: 0,
             time_running: 0,
             is_running: Arc::new(Mutex::new(false)),
             selected_mouse_button: Arc::new(Mutex::new(MouseButton::Left)),
