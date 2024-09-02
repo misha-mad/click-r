@@ -12,6 +12,8 @@ authors = ["misha-mad"]
 [dependencies]
 iced = { version = "0.12.1", features = ["tokio"] }
 enigo = "0.2.1"
+serde_json = "1.0.127"
+serde = { version = "1.0.209", features = ["derive"] }
 
 [badges]
 maintenance = { status = "actively-developed" }

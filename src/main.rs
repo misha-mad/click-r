@@ -1,17 +1,22 @@
 use enigo::{Button as MouseButton, Direction::Click, Enigo, Mouse, Settings as EnigoSettings};
+use iced::alignment;
 use iced::font::{Family, Stretch, Style, Weight};
-use iced::theme::{Button, Theme};
+use iced::theme::{Button, Custom, Palette, Theme};
 use iced::widget::{button, column, horizontal_rule, pick_list, row, slider, text, text_input};
 use iced::Alignment::Center;
 use iced::Font;
 use iced::Length::{Fill, FillPortion};
 use iced::{executor, Application, Command, Element, Settings as IcedSettings, Subscription};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::path::Path;
 use std::sync::{mpsc, Arc, Mutex};
-use std::thread;
 use std::time::Duration;
+use std::{fs, thread};
 
+#[derive(Serialize, Deserialize)]
 struct AutoClicker {
     click_interval_slider_value: u8,
+    #[serde(skip)]
     click_thread: Option<thread::JoinHandle<()>>,
     clicks_count_slider_value: u8,
     delay_hours: u64,
@@ -20,14 +25,76 @@ struct AutoClicker {
     duration_hours: u64,
     duration_minutes: u64,
     duration_seconds: u64,
+    #[serde(skip)]
     delay_timer: u64,
+    #[serde(skip)]
     time_running: u64,
+    #[serde(skip)]
     is_running: Arc<Mutex<bool>>,
+    #[serde(skip)]
     selected_mouse_button: Arc<Mutex<MouseButton>>,
+    #[serde(skip)]
     stop_sender: Option<mpsc::Sender<()>>,
+    #[serde(with = "ThemeDef")]
     theme: Theme,
+    #[serde(skip)]
     ticks_count: u64,
+    #[serde(skip)]
     total_clicks: Arc<Mutex<u32>>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Theme")]
+enum ThemeDef {
+    Light,
+    Dark,
+    Dracula,
+    Nord,
+    SolarizedLight,
+    SolarizedDark,
+    GruvboxLight,
+    GruvboxDark,
+    CatppuccinLatte,
+    CatppuccinFrappe,
+    CatppuccinMacchiato,
+    CatppuccinMocha,
+    TokyoNight,
+    TokyoNightStorm,
+    TokyoNightLight,
+    KanagawaWave,
+    KanagawaDragon,
+    KanagawaLotus,
+    Moonfly,
+    Nightfly,
+    Oxocarbon,
+    #[serde(
+        serialize_with = "serialize_arc_custom_theme",
+        deserialize_with = "deserialize_arc_custom_theme"
+    )]
+    Custom(Arc<Custom>),
+}
+
+fn serialize_arc_custom_theme<S>(_: &Arc<Custom>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    "Rust".serialize(serializer)
+}
+
+fn deserialize_arc_custom_theme<'de, D>(_: D) -> Result<Arc<Custom>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Arc::new(Custom::new(
+        "Rust".to_string(),
+        Palette {
+            background: Default::default(),
+            text: Default::default(),
+            primary: Default::default(),
+            success: Default::default(),
+            danger: Default::default(),
+        },
+    )))
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +108,7 @@ enum Message {
     DurationSecondsChanged(u64),
     IntervalSliderChanged(u8),
     ResetToDefaults,
+    SaveSettings,
     SelectMouseButton(MouseButton),
     Start,
     Stop,
@@ -55,7 +123,19 @@ impl Application for AutoClicker {
     type Flags = ();
 
     fn new(_flags: Self::Flags) -> (Self, Command<Self::Message>) {
-        (Self::default(), Command::none())
+        let default_settings = Self::default();
+
+        if Path::new("settings.json").exists() {
+            match fs::read_to_string("settings.json") {
+                Ok(settings) => match serde_json::from_str(&settings) {
+                    Ok(new_settings) => (new_settings, Command::none()),
+                    Err(_) => (default_settings, Command::none()),
+                },
+                Err(_) => (default_settings, Command::none()),
+            }
+        } else {
+            (default_settings, Command::none())
+        }
     }
 
     fn title(&self) -> String {
@@ -214,6 +294,11 @@ impl Application for AutoClicker {
             Message::DurationSecondsChanged(new_seconds) => {
                 println!("Setting duration_seconds to {}", new_seconds);
                 self.duration_seconds = new_seconds;
+                Command::none()
+            }
+            Message::SaveSettings => {
+                let settings = serde_json::to_string(self).unwrap();
+                fs::write("settings.json", settings).expect("Unable to write settings to file");
                 Command::none()
             }
         }
@@ -397,12 +482,19 @@ impl Application for AutoClicker {
         let total_clicks_text = text(format!("Total Clicks: {}", *total_clicks));
         let delay_timer_text = text(format!("Delay Timer: {}s", self.delay_timer));
         let time_running_text = text(format!("Time Running: {}s", self.time_running));
-        let start_button = button(text("Start"));
-        let stop_button = button(text("Stop"));
+        let start_button =
+            button(text("Start").horizontal_alignment(alignment::Horizontal::Center));
+        let stop_button = button(text("Stop").horizontal_alignment(alignment::Horizontal::Center));
 
-        let reset_button = button(text("Reset to Defaults"))
-            .on_press(Message::ResetToDefaults)
-            .style(Button::Destructive);
+        let reset_button =
+            button(text("Reset to Defaults").horizontal_alignment(alignment::Horizontal::Center))
+                .on_press(Message::ResetToDefaults)
+                .style(Button::Destructive);
+
+        let save_settings_button =
+            button(text("Save Settings").horizontal_alignment(alignment::Horizontal::Center))
+                .on_press(Message::SaveSettings)
+                .style(Button::Primary);
 
         let content = column![
             // The `Parameter Name` section
@@ -535,28 +627,34 @@ impl Application for AutoClicker {
                 .height(FillPortion(1)),
             horizontal_rule(20),
             row![
+                row![
+                    start_button
+                        .on_press_maybe(if *self.is_running.lock().unwrap() {
+                            None
+                        } else {
+                            Some(Message::Start)
+                        })
+                        .width(FillPortion(1)),
+                    stop_button
+                        .on_press_maybe(if *self.is_running.lock().unwrap() {
+                            Some(Message::Stop)
+                        } else {
+                            None
+                        })
+                        .width(FillPortion(1)),
+                ]
+                .spacing(10),
                 row![].width(Fill),
                 row![
-                    row![].width(Fill),
-                    start_button.on_press_maybe(if *self.is_running.lock().unwrap() {
-                        None
-                    } else {
-                        Some(Message::Start)
-                    }),
-                    stop_button.on_press_maybe(if *self.is_running.lock().unwrap() {
-                        Some(Message::Stop)
-                    } else {
-                        None
-                    }),
-                    row![].width(Fill),
+                    save_settings_button
+                        .on_press(Message::SaveSettings)
+                        .style(Button::Positive)
+                        .width(FillPortion(1)),
+                    reset_button
+                        .on_press(Message::ResetToDefaults)
+                        .width(FillPortion(1)),
                 ]
-                .spacing(10)
-                .width(FillPortion(1)),
-                row![
-                    row![].width(Fill),
-                    row![reset_button.on_press(Message::ResetToDefaults),],
-                ]
-                .width(FillPortion(1)),
+                .spacing(10),
             ]
             .align_items(Center)
             .spacing(10)
