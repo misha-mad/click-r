@@ -448,7 +448,7 @@ impl Application for AutoClicker {
         let choose_mouse_button_current_value_text =
             text(format!("{:?}", self.selected_mouse_button.lock().unwrap()));
 
-        let left_button = button(text("Left"))
+        let left_button = button(text("Left").horizontal_alignment(alignment::Horizontal::Center))
             .on_press(Message::SelectMouseButton(MouseButton::Left))
             .style(
                 if *self.selected_mouse_button.lock().unwrap() == MouseButton::Left {
@@ -458,25 +458,27 @@ impl Application for AutoClicker {
                 },
             );
 
-        let middle_button = button(text("Middle"))
-            .on_press(Message::SelectMouseButton(MouseButton::Middle))
-            .style(
-                if *self.selected_mouse_button.lock().unwrap() == MouseButton::Middle {
-                    Button::Primary
-                } else {
-                    Button::Secondary
-                },
-            );
+        let middle_button =
+            button(text("Middle").horizontal_alignment(alignment::Horizontal::Center))
+                .on_press(Message::SelectMouseButton(MouseButton::Middle))
+                .style(
+                    if *self.selected_mouse_button.lock().unwrap() == MouseButton::Middle {
+                        Button::Primary
+                    } else {
+                        Button::Secondary
+                    },
+                );
 
-        let right_button = button(text("Right"))
-            .on_press(Message::SelectMouseButton(MouseButton::Right))
-            .style(
-                if *self.selected_mouse_button.lock().unwrap() == MouseButton::Right {
-                    Button::Primary
-                } else {
-                    Button::Secondary
-                },
-            );
+        let right_button =
+            button(text("Right").horizontal_alignment(alignment::Horizontal::Center))
+                .on_press(Message::SelectMouseButton(MouseButton::Right))
+                .style(
+                    if *self.selected_mouse_button.lock().unwrap() == MouseButton::Right {
+                        Button::Primary
+                    } else {
+                        Button::Secondary
+                    },
+                );
 
         let total_clicks = self.total_clicks.lock().unwrap();
         let total_clicks_text = text(format!("Total Clicks: {}", *total_clicks));
@@ -606,10 +608,18 @@ impl Application for AutoClicker {
                 .align_items(Center)
                 .spacing(10)
                 .width(FillPortion(1)),
-                row![left_button, middle_button, right_button]
-                    .width(FillPortion(2))
+                row![
+                    row![
+                        left_button.width(FillPortion(1)),
+                        middle_button.width(FillPortion(1)),
+                        right_button.width(FillPortion(1))
+                    ]
+                    .spacing(10)
                     .align_items(Center)
-                    .spacing(10),
+                    .width(FillPortion(1)),
+                    row![].width(FillPortion(1)),
+                ]
+                .width(FillPortion(2)),
             ]
             .align_items(Center)
             .spacing(10),
