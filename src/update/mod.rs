@@ -14,28 +14,9 @@ mod stop;
 mod theme_changed;
 mod tick;
 
+use crate::message::Message;
 use crate::AutoClicker;
-use enigo::Button;
-use iced::{Command, Theme};
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    ClickCountSliderChanged(u8),
-    DelayHoursChanged(u64),
-    DelayMinutesChanged(u64),
-    DelaySecondsChanged(u64),
-    DurationHoursChanged(u64),
-    DurationMinutesChanged(u64),
-    DurationSecondsChanged(u64),
-    IntervalSliderChanged(u8),
-    ResetToDefaults,
-    SaveSettings,
-    SelectMouseButton(Button),
-    Start,
-    Stop,
-    ThemeChanged(Theme),
-    Tick,
-}
+use iced::Command;
 
 pub fn update_handler(auto_clicker: &mut AutoClicker, message: Message) -> Command<Message> {
     match message {

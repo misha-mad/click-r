@@ -1,8 +1,12 @@
+mod message;
+mod theme;
 mod update;
 mod utils;
 
-use crate::update::{update_handler, Message};
-use crate::utils::{deserialize_mouse_button, serialize_mouse_button, ThemeDef};
+use crate::message::Message;
+use crate::theme::ThemeDef;
+use crate::update::update_handler;
+use crate::utils::{deserialize_mouse_button, serialize_mouse_button};
 use enigo::Button as MouseButton;
 use iced::alignment;
 use iced::font::{Family, Stretch, Style, Weight};
