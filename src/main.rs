@@ -31,7 +31,10 @@ struct AutoClicker {
     time_running: u64,
     #[serde(skip)]
     is_running: Arc<Mutex<bool>>,
-    #[serde(skip)]
+    #[serde(
+        serialize_with = "serialize_mouse_button",
+        deserialize_with = "deserialize_mouse_button"
+    )]
     selected_mouse_button: Arc<Mutex<MouseButton>>,
     #[serde(skip)]
     stop_sender: Option<mpsc::Sender<()>>,
@@ -72,6 +75,33 @@ enum ThemeDef {
         deserialize_with = "deserialize_arc_custom_theme"
     )]
     Custom(Arc<Custom>),
+}
+
+fn serialize_mouse_button<S>(button: &Arc<Mutex<MouseButton>>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let button = button.lock().unwrap();
+    match *button {
+        MouseButton::Left => "Left".serialize(serializer),
+        MouseButton::Middle => "Middle".serialize(serializer),
+        MouseButton::Right => "Right".serialize(serializer),
+        _ => Err(serde::ser::Error::custom("Unsupported mouse button")),
+    }
+}
+
+fn deserialize_mouse_button<'de, D>(deserializer: D) -> Result<Arc<Mutex<MouseButton>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let button_str = String::deserialize(deserializer)?;
+    let button = match button_str.as_str() {
+        "Left" => MouseButton::Left,
+        "Middle" => MouseButton::Middle,
+        "Right" => MouseButton::Right,
+        _ => return Err(serde::de::Error::custom("Unsupported mouse button")),
+    };
+    Ok(Arc::new(Mutex::new(button)))
 }
 
 fn serialize_arc_custom_theme<S>(_: &Arc<Custom>, serializer: S) -> Result<S::Ok, S::Error>
