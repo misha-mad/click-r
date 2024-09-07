@@ -330,7 +330,7 @@ impl Application for AutoClicker {
         let theme_current_value_text = text(format!("{:?}", self.theme));
         let pick_list = pick_list(Theme::ALL, Some(&self.theme), Message::ThemeChanged);
         let interval_text = text("Interval:");
-        let interval_current_value_text = text(format!("{:?}", self.click_interval_slider_value));
+        let interval_current_value_text = text(format!("{:?}s", self.click_interval_slider_value));
 
         let interval_slider = slider(
             1..=100,
@@ -338,8 +338,17 @@ impl Application for AutoClicker {
             Message::IntervalSliderChanged,
         );
 
-        let clicks_count_text = text("Clicks per interval:");
-        let clicks_count_current_value_text = text(format!("{:?}", self.clicks_count_slider_value));
+        let clicks_count_text = text("Click counts between intervals:");
+
+        let clicks_count_current_value_text = text(format!(
+            "{:?} {}",
+            self.clicks_count_slider_value,
+            if self.clicks_count_slider_value == 1 {
+                "click"
+            } else {
+                "clicks"
+            }
+        ));
 
         let clicks_count_slider = slider(
             1..=100,
@@ -347,7 +356,7 @@ impl Application for AutoClicker {
             Message::ClickCountSliderChanged,
         );
 
-        let delay_before_start_text = text("Delay before start: {}s");
+        let delay_before_start_text = text("Delay before start:");
 
         let delay_before_start_current_value_text = text(format!(
             "{}s",
@@ -480,12 +489,16 @@ impl Application for AutoClicker {
                     },
                 );
 
-        let total_clicks = self.total_clicks.lock().unwrap();
-        let total_clicks_text = text(format!("Total Clicks: {}", *total_clicks));
+        let total_clicks_text = text(format!(
+            "Total Clicks: {}",
+            *self.total_clicks.lock().unwrap()
+        ));
         let delay_timer_text = text(format!("Delay Timer: {}s", self.delay_timer));
         let time_running_text = text(format!("Time Running: {}s", self.time_running));
+
         let start_button =
             button(text("Start").horizontal_alignment(alignment::Horizontal::Center));
+
         let stop_button = button(text("Stop").horizontal_alignment(alignment::Horizontal::Center));
 
         let reset_button =
