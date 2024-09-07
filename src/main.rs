@@ -1,7 +1,9 @@
+mod update;
 mod utils;
 
+use crate::update::{update_handler, Message};
 use crate::utils::{deserialize_mouse_button, serialize_mouse_button, ThemeDef};
-use enigo::{Button as MouseButton, Direction::Click, Enigo, Mouse, Settings as EnigoSettings};
+use enigo::Button as MouseButton;
 use iced::alignment;
 use iced::font::{Family, Stretch, Style, Weight};
 use iced::theme::{Button, Theme};
@@ -49,25 +51,6 @@ struct AutoClicker {
     total_clicks: Arc<Mutex<u32>>,
 }
 
-#[derive(Debug, Clone)]
-enum Message {
-    ClickCountSliderChanged(u8),
-    DelayHoursChanged(u64),
-    DelayMinutesChanged(u64),
-    DelaySecondsChanged(u64),
-    DurationHoursChanged(u64),
-    DurationMinutesChanged(u64),
-    DurationSecondsChanged(u64),
-    IntervalSliderChanged(u8),
-    ResetToDefaults,
-    SaveSettings,
-    SelectMouseButton(MouseButton),
-    Start,
-    Stop,
-    ThemeChanged(Theme),
-    Tick,
-}
-
 impl Application for AutoClicker {
     type Executor = executor::Default;
     type Message = Message;
@@ -95,147 +78,7 @@ impl Application for AutoClicker {
     }
 
     fn update(&mut self, message: Message) -> Command<Self::Message> {
-        match message {
-            Message::ThemeChanged(theme) => {
-                self.theme = theme;
-                Command::none()
-            }
-            Message::SelectMouseButton(button) => {
-                self.selected_mouse_button = Arc::new(Mutex::new(button));
-                Command::none()
-            }
-            Message::Start => {
-                *self.is_running.lock().unwrap() = true;
-                self.delay_timer = 0;
-                self.time_running = 0;
-                self.ticks_count = 0;
-                self.total_clicks = Arc::new(Mutex::new(0));
-                let interval = self.click_interval_slider_value;
-                let clicks_count = self.clicks_count_slider_value;
-                let (tx, rx) = mpsc::channel();
-                let total_clicks = Arc::clone(&self.total_clicks);
-                let selected_mouse_button = Arc::clone(&self.selected_mouse_button);
-                let is_running = Arc::clone(&self.is_running);
-
-                let delay_before_start =
-                    self.delay_seconds + self.delay_minutes * 60 + self.delay_hours * 3600;
-
-                let duration = if self.duration_seconds == 0
-                    && self.duration_minutes == 0
-                    && self.duration_hours == 0
-                {
-                    None
-                } else {
-                    Some(
-                        self.duration_seconds
-                            + self.duration_minutes * 60
-                            + self.duration_hours * 3600,
-                    )
-                };
-
-                self.stop_sender = Some(tx);
-
-                let handle = thread::spawn(move || {
-                    thread::park_timeout(Duration::from_secs(delay_before_start));
-                    let mut enigo = Enigo::new(&EnigoSettings::default()).unwrap();
-                    let button = selected_mouse_button.lock().unwrap().clone();
-
-                    let end_time =
-                        std::time::Instant::now() + Duration::from_secs(duration.unwrap_or(0));
-
-                    loop {
-                        if rx.try_recv().is_ok() {
-                            *is_running.lock().unwrap() = false;
-                            break;
-                        }
-
-                        if duration.is_some() && std::time::Instant::now() >= end_time {
-                            *is_running.lock().unwrap() = false;
-                            break;
-                        }
-
-                        for _ in 0..clicks_count {
-                            enigo.button(button, Click).unwrap();
-                            *total_clicks.lock().unwrap() += 1;
-                        }
-
-                        thread::park_timeout(Duration::from_secs(interval as u64));
-                    }
-                });
-
-                self.click_thread = Some(handle);
-                Command::none()
-            }
-            Message::Stop => {
-                if let Some(sender) = self.stop_sender.take() {
-                    if sender.send(()).is_ok() {
-                        if let Some(handle) = self.click_thread.take() {
-                            handle.thread().unpark();
-                            handle.join().unwrap();
-                        }
-                    }
-                }
-
-                Command::none()
-            }
-            Message::Tick => {
-                if *self.is_running.lock().unwrap() {
-                    self.ticks_count += 1;
-
-                    let delay_before_start =
-                        (self.delay_hours * 3600) + (self.delay_minutes * 60) + self.delay_seconds;
-
-                    if self.ticks_count > delay_before_start {
-                        self.time_running += 1;
-                    } else {
-                        self.delay_timer += 1;
-                    }
-                }
-
-                Command::none()
-            }
-            Message::ResetToDefaults => {
-                *self = Self::default();
-                Command::none()
-            }
-            Message::IntervalSliderChanged(new_interval) => {
-                self.click_interval_slider_value = new_interval;
-                Command::none()
-            }
-            Message::ClickCountSliderChanged(new_clicks_count) => {
-                self.clicks_count_slider_value = new_clicks_count;
-                Command::none()
-            }
-            Message::DelayHoursChanged(new_hours) => {
-                self.delay_hours = new_hours;
-                Command::none()
-            }
-            Message::DelayMinutesChanged(new_minutes) => {
-                self.delay_minutes = new_minutes;
-                Command::none()
-            }
-            Message::DelaySecondsChanged(new_seconds) => {
-                self.delay_seconds = new_seconds;
-                Command::none()
-            }
-            Message::DurationHoursChanged(new_hours) => {
-                self.duration_hours = new_hours;
-                Command::none()
-            }
-            Message::DurationMinutesChanged(new_minutes) => {
-                self.duration_minutes = new_minutes;
-                Command::none()
-            }
-            Message::DurationSecondsChanged(new_seconds) => {
-                self.duration_seconds = new_seconds;
-                Command::none()
-            }
-            Message::SaveSettings => {
-                let settings = serde_json::to_string(self).unwrap();
-                fs::write("settings.json", settings).expect("Unable to write settings to file");
-                Command::none()
-            }
-        }
+        update_handler(self, message)
     }
 
     fn view(&self) -> Element<Self::Message> {
