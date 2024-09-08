@@ -1,4 +1,5 @@
 use enigo::Button;
+use iced::keyboard::Key;
 use iced::Theme;
 
 #[derive(Debug, Clone)]
@@ -18,4 +19,6 @@ pub enum Message {
     Stop,
     ThemeChanged(Theme),
     Tick,
+    KeyPressed(Key),
+    None
 }

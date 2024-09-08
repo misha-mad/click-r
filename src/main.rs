@@ -11,7 +11,9 @@ use crate::utils::{deserialize_mouse_button, serialize_mouse_button};
 use crate::view::view_handler;
 use enigo::Button as MouseButton;
 use iced::theme::Theme;
-use iced::{executor, Application, Command, Element, Settings as IcedSettings, Subscription};
+use iced::{
+    event, executor, Application, Command, Element, Settings as IcedSettings, Subscription,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{mpsc, Arc, Mutex};
@@ -90,11 +92,20 @@ impl Application for AutoClicker {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        if *self.is_running.lock().unwrap() {
+        let timer_subscription = if *self.is_running.lock().unwrap() {
             iced::time::every(Duration::from_millis(1000)).map(|_| Message::Tick)
         } else {
             Subscription::none()
-        }
+        };
+
+        let keyboard_subscription = event::listen().map(|event| match event {
+            iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+                key, modifiers: _, ..
+            }) => Message::KeyPressed(key),
+            _ => Message::None,
+        });
+
+        Subscription::batch(vec![timer_subscription, keyboard_subscription])
     }
 }
 

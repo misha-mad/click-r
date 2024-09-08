@@ -6,6 +6,7 @@ mod duration_hours_changed;
 mod duration_minutes_changed;
 mod duration_seconds_changed;
 mod interval_slider_changed;
+mod key_pressed;
 mod reset_to_defaults;
 mod save_settings;
 mod select_mouse_button;
@@ -51,5 +52,7 @@ pub fn update_handler(auto_clicker: &mut AutoClicker, message: Message) -> Comma
             duration_seconds_changed::handle(auto_clicker, new_seconds)
         }
         Message::SaveSettings => save_settings::handle(auto_clicker),
+        Message::KeyPressed(key) => key_pressed::handle(auto_clicker, key),
+        Message::None => Command::none(),
     }
 }
